@@ -487,6 +487,58 @@ body {
 </div>
 
 <script>
+/* ── Sound Effects (Web Audio API) ── */
+const SFX = (() => {
+  let ctx;
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    return ctx;
+  }
+
+  function tone(freq, dur, type, startDelay, vol) {
+    const c = getCtx();
+    const t = c.currentTime + (startDelay || 0);
+    const osc = c.createOscillator();
+    const g = c.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    g.gain.setValueAtTime(vol || 0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(t); osc.stop(t + dur);
+  }
+
+  return {
+    start() {
+      getCtx().resume();
+      tone(523, 0.1, 'sine', 0, 0.2);
+      tone(659, 0.1, 'sine', 0.1, 0.2);
+      tone(784, 0.15, 'sine', 0.2, 0.25);
+    },
+    tap()   { tone(800, 0.06, 'sine', 0, 0.12); },
+    correct() { tone(523, 0.12, 'sine', 0, 0.25); tone(659, 0.18, 'sine', 0.1, 0.25); },
+    wrong()   { tone(300, 0.15, 'square', 0, 0.18); tone(220, 0.2, 'square', 0.1, 0.18); },
+    timeout() { tone(350, 0.2, 'triangle', 0, 0.2); tone(250, 0.35, 'triangle', 0.12, 0.18); },
+    roundComplete() {
+      tone(523, 0.1, 'sine', 0, 0.2);
+      tone(659, 0.1, 'sine', 0.08, 0.2);
+      tone(784, 0.18, 'sine', 0.16, 0.25);
+    },
+    checkpoint() {
+      tone(523, 0.1, 'sine', 0, 0.22);
+      tone(659, 0.1, 'sine', 0.1, 0.22);
+      tone(784, 0.1, 'sine', 0.2, 0.22);
+      tone(1047, 0.25, 'sine', 0.3, 0.28);
+    },
+    gameOver() {
+      tone(523, 0.2, 'sine', 0, 0.22);
+      tone(440, 0.2, 'sine', 0.2, 0.2);
+      tone(349, 0.4, 'sine', 0.4, 0.18);
+    },
+    tick() { tone(1000, 0.04, 'sine', 0, 0.1); },
+  };
+})();
+
 const G = (() => {
 
   /* ── State ── */
@@ -602,6 +654,7 @@ const G = (() => {
   function startTimer() {
     stopTimer();
     levelT0 = performance.now();
+    let lastTickSec = Infinity;
     const fill = $('tFill'), numEl = $('tNum'), total = timeLimit * 1000;
     fill.style.transition = 'none';
     fill.style.width = '100%';
@@ -616,6 +669,10 @@ const G = (() => {
       const pct = remaining / total;
       numEl.textContent = Math.ceil(remaining / 1000);
       numEl.classList.toggle('urgent', remaining < 4500);
+      if (remaining < 5000 && remaining > 0) {
+        const sec = Math.ceil(remaining / 1000);
+        if (sec !== lastTickSec) { lastTickSec = sec; SFX.tick(); }
+      }
       fill.style.backgroundColor = pct > .55 ? 'var(--correct)' : pct > .25 ? 'var(--warn)' : 'var(--wrong)';
       if (remaining > 0) { rafId = requestAnimationFrame(tick); }
       else { onTimeout(); }
@@ -677,6 +734,7 @@ const G = (() => {
 
   /* ── Round complete overlay (non-summary rounds) ── */
   function showRoundComplete(gained, cb) {
+    SFX.roundComplete();
     const DIM_UNITS = { hue: '°', lightness: '%', saturation: '%' };
     const DIM_LABEL = { hue: 'Hue', lightness: 'Lightness', saturation: 'Saturation' };
 
@@ -724,11 +782,13 @@ const G = (() => {
   function onCellClick(idx) {
     if (locked) return;
     if ($('game').classList.contains('hidden')) return;
+    SFX.tap();
     locked = true;
     stopTimer();
     const cells = [...document.querySelectorAll('.cell')];
     if (idx === diffIdx) {
       cells[idx].classList.add('fx-correct');
+      SFX.correct();
       const gained = lv * 100 + Math.round(getTimeLeft() * 15);
       score += gained;
       totalCorrect++; totalAttempts++;
@@ -746,6 +806,7 @@ const G = (() => {
       }
     } else {
       cells[idx].classList.add('fx-wrong');
+      SFX.wrong();
       lives--;
       totalAttempts++;
       renderHUD();
@@ -758,6 +819,7 @@ const G = (() => {
   function onTimeout() {
     if (locked) return;
     locked = true;
+    SFX.timeout();
     lives--;
     totalAttempts++;
     renderHUD();
@@ -889,6 +951,7 @@ const G = (() => {
     const resEl = $('fbResult'), subEl = $('fbSub'), bodyEl = $('fbBody'), btn = $('fbBtn');
 
     if (mode === 'summary') {
+      SFX.checkpoint();
       const round = Math.ceil(lv / 3);
       const start = lv - 2;
       resEl.innerHTML = `✓ Checkpoint! <span class="score-pill">+${gained} pts</span>`;
@@ -922,6 +985,7 @@ const G = (() => {
 
   /* ── Game over ── */
   function endGame() {
+    SFX.gameOver();
     const rating = [...RATINGS].reverse().find(r => lv >= r.min) || RATINGS[0];
     const tier = getTier(lv);
     const acc  = totalAttempts > 0 ? Math.round(totalCorrect / totalAttempts * 100) : 0;
@@ -937,6 +1001,7 @@ const G = (() => {
   /* ── Public API ── */
   return {
     start() {
+      SFX.start();
       lv = 1; score = 0; lives = 3; locked = false;
       roundData = [null, null, null];
       totalCorrect = 0; totalAttempts = 0;
