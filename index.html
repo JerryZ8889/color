@@ -973,7 +973,7 @@ const G = (() => {
         btn.className = 'btn-main';
         btn.onclick = () => endGame();
       } else {
-        btn.textContent = `Continue to Round ${lv + 1} →`;
+        btn.textContent = 'CONTINUE';
         btn.className = 'btn-main btn-pulse';
         btn.onclick = () => { lv++; showScreen('game'); startLevel(); };
       }
